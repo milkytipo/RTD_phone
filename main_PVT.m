@@ -1,0 +1,215 @@
+%% Main script of testbench for GSARx and CADLL algorithm.
+close all; fclose all;  clc; clear
+
+% Include subfolders, without signal generator
+addpath(genpath('.\config\'));
+addpath(genpath('.\receiver\'));
+addpath(genpath('.\recorder\'));
+addpath(genpath('.\tools\'));
+
+%% Configuration for receiver parameters
+global GSAR_CONSTANTS;                   
+GSAR_CONSTANTS = GlobalConstants();      % Define some global constants
+configOpt   = 'DEFAULT';                 % Default configuration ('DEFAULT') / External file configuration ('EXTERN') / Advanced config ('ADVANCED')
+configFile  = '.\GSARx_v0.2_SJTU.conf';  % Ignore when using default settings 
+% IF Data File Name
+GSAR_CONSTANTS.STR_RECV.fileNum = 1;  %正确配置文件数量，算法会依次读取前N个文件
+GSAR_CONSTANTS.STR_RECV.datafilename = {'E:\数据处理结果\Lujiazui_Static_Point_v2\Lujiazui_Static_Point_1\Lujiazui_Static_Point_1_allObs.txt'};
+fileType = 1;  % 1: RINEX   2: Obs   3: Mat
+
+%% Setup the device parameters
+signal.fid          = zeros(1,GSAR_CONSTANTS.STR_RECV.fileNum);  % signal file id
+signal.sis          = cell(1,GSAR_CONSTANTS.STR_RECV.dataNum); % the read signal, 每个cell对应一个文件的数据
+signal.sis_presv    = [];
+signal.Tunit        = 0.250; % the data length read at each loop
+signal.headData     = 8184;
+signal.equipType    = 1;   
+% 宇致单频设备：　　1   
+% 科大三院设备：　　2,21(无校验位)    
+% 盛铂设备：　　　　3
+% 宇志全频点设备：　4
+% 仿真类型：　　　　100
+signal.devSubtype   = 104; % 宇志全频点设备采集模式
+%百位：0-4bits, 1-8bits, 2-12bits 采集数据位宽 
+%十位：0-宽带， 1-窄带； 
+%个位：0~5，对应不同的采集模式
+sisSource_Init(signal);
+
+%% Construct(Initialize) receiver structure
+receiver = ReceiverConstruct();    % Construct the receiver structure
+
+% Initial config settings
+% ----------- navigation system type --------------
+receiver.syst                     = 'GPS_L1CA';  % Navigation signal system: GPS_L1CA / BDS_B1I / B1I_L1CA
+% receiver time type
+receiver.config.recvConfig.timeType = 'GPST';   % NULL / GPST / BDST
+
+% ------------ receiver config       ---------------
+receiver.config.recvConfig.startMode         = 'COLD_START';      % COLD_START / WARM_START
+
+% ？？？？？？？？？？？？？？？？？？？接下来这段没看明白？？？？？？？？？？%
+
+receiver.config.recvConfig.reacquireMode     = 'LIGHT';           % LIGHT / MEDIUM / HEAVY 
+                                                       % LIGHT: When a satellite has been acquired before and lost of lock, reacquire twice;
+                                                       % MEDIUM: Use ephemeris info to assist, normal process, TODO;
+                                                       % HEAVY: Reacquire until succeed.
+receiver.config.recvConfig.satTableUpdatPeriod = 1;                % [s]. This interval is applied for the following situations:
+                                                       % Case 1: Check downloaded almanac;
+                                                       % Case 2: Fill up idle channels;
+receiver.config.recvConfig.configPage        = ConfigLoad(configOpt, GSAR_CONSTANTS, configFile);
+
+% Define Positioning Mode: 00 signle-point least-square; 01 signle-point Kalman filter;
+%                          10 RTD least-square;
+receiver.config.recvConfig.positionType      = 01;
+receiver.config.recvConfig.configPage.Pvt.pseudorangePreErrThre = 99999; % 利用预测位置监测伪距是否异常
+% ------- PVT Freq config ----------
+receiver.pvtCalculator.pvtT                 = 1;  % PVT frequency 1/receiver.pvtCalculator.pvtT [Hz]
+
+
+% True position of the antenna if known, otherwise make it empty
+receiver.config.recvConfig.truePosition      = [];
+% True time of signal if known, otherwise make it -1
+receiver.config.recvConfig.trueTime          = -1;
+
+receiver.config.recvConfig.targetSatellites(1).syst        = 'BDS_B1I';
+receiver.config.recvConfig.targetSatellites(1).prnNum      = [1:32];      % Satellites want to process in BDS
+receiver.config.recvConfig.targetSatellites(2).syst        = 'GPS_L1CA';
+receiver.config.recvConfig.targetSatellites(2).prnNum      = [1:32];
+
+
+receiver.config.recvConfig.numberOfChannels(1).syst        = 'BDS_B1I';
+receiver.config.recvConfig.numberOfChannels(1).channelNum  = 10;            % Number of channels in BDS
+receiver.config.recvConfig.numberOfChannels(2).syst        = 'GPS_L1CA';
+receiver.config.recvConfig.numberOfChannels(2).channelNum  = 10;            % Number of channels in GPS
+
+% Elevation mask to exclude signals from satellites at low elevation, [degree]
+receiver.config.recvConfig.elevationMask      = 5;
+
+receiver.config.logConfig.logFilePath       = '.\logfile\';
+
+receiver.config.recvConfig.raimFailure = 12; %  ；
+
+
+% ------------ log files config        ----------------- 
+
+%% Reconfig receiver struct according to config parameters
+receiver = ConfigReceiver_PVT(receiver);
+receiver.device.gpuExist = 0; %gpuExist; % yes(1) / no(0)
+%% Start up the receiver according to the start mode
+% Final step of configuration before receiver process, can't be affect by external config file.
+receiver = StartReceiver(receiver); 
+
+% Initialization for recorder
+receiver = RecorderInitializing(receiver); % Cause recorder is related with channel assignment, need to be placed at the last
+receiver_ref  =receiver;
+logNamePart = 'NLS_DD_5_究极优化版';
+if fileType == 1
+    filename_RinexRef = 'E:\导航组\测试数据\2018-8-21 电院位置标定实验\南边马路标定\第二次行走\2018_8_21_ref.18O'; 
+    filename_RinexObs = 'E:\导航组\测试数据\2018-8-21 电院位置标定实验\南边马路标定\第二次行走\2018_08_21_21_18_07_Rinex.txt';
+    fileNameLLH = 'E:\导航组\测试数据\2018-8-21 电院位置标定实验\南边马路标定\第二次行走\2018_08_21_21_18_07_LLH.txt';
+    fileName_R = 'E:\导航组\测试数据\2018-8-21 电院位置标定实验\南边马路标定\第二次行走\2018_08_21_21_18_07_R.txt';
+    fileName_Acc = 'E:\导航组\测试数据\2018-8-21 电院位置标定实验\南边马路标定\第二次行走\2018_08_21_21_18_07_acc.txt';
+
+    fileNameGps = 'E:\导航组\测试数据\2018-8-21 电院位置标定实验\2018_8_21.18p';
+   
+    fileNameBds = 'E:\个人资料\小论文材料\ION2018\data\BDS_Eph_20180415.18p';
+    refPos = [ -2853445.926; 4667466.476; 3268291.272];  % 静态点
+    [time_LLH,longitude,latitude,height] =textread(fileNameLLH,'%s %f %f %f ','delimiter',',');  
+    [Acc_WGS84,V_WGS84_s]=readIMU(fileName_R,fileName_Acc);
+%     [Acc_WGS84,V_WGS84_s]=readIMU(fileName_R_Acc);
+    [parameter_ref, SOW_ref] = rinex2obs_basestation(filename_RinexRef, fileNameBds, fileNameGps, 1, refPos, receiver_ref.syst,Acc_WGS84,V_WGS84_s);  
+    [parameter, SOW] = rinex2obs(filename_RinexObs, fileNameBds, fileNameGps, 1, refPos, receiver.syst,Acc_WGS84,V_WGS84_s);  
+elseif fileType == 2
+    [parameter, SOW] = readObs(GSAR_CONSTANTS.STR_RECV.datafilename{1});
+elseif fileType == 3
+    load('paraNJeastRoad.mat');
+    load('sowNJeastRoad.mat');
+%     load('paraSJTU.mat');
+%     load('sowSJTU.mat');
+end
+
+
+%% Going into the receiver processing loops
+Loop = 1;
+while 1
+    % If receiver gets specific SOW, make sure do next PVT in the integral  
+    Loop = Loop + 1;   
+    if Loop > size(SOW, 2)
+        break;
+    end
+    
+    receiver.timer.recvSOW = SOW(1, Loop);
+    switch receiver.config.recvConfig.timeType
+        case 'GPST'
+            receiver.timer.recvSOW_BDS = receiver.timer.recvSOW - receiver.timer.BDT2GPST(1);
+            receiver.timer.recvSOW_GPS = receiver.timer.recvSOW;
+        case 'BDST'
+            receiver.timer.recvSOW_BDS = receiver.timer.recvSOW;
+            receiver.timer.recvSOW_GPS = receiver.timer.recvSOW + receiver.timer.BDT2GPST(1);
+    end
+     % Using Kalman Filter to predict the last position
+    [receiver.pvtCalculator, pvtForecast_Succ] = pvt_forecast_filt(receiver.syst, receiver.pvtCalculator, receiver.timer, receiver.config,parameter, Loop);
+    
+    receiver = pointPos_LOG(receiver, receiver_ref,pvtForecast_Succ, parameter, parameter_ref,Loop);  %这里第二个值为succ还是0，对kalman没有影响，对ls有微弱影响，用于
+    fprintf('%10.6f    %10.6f    %8.2f     %8.2f    %8.2f    %8.2f     %2.2d\n', receiver.pvtCalculator.positionLLH, receiver.pvtCalculator.positionVelocity, receiver.pvtCalculator.posiCheck);
+    
+    if receiver.pvtCalculator.posiCheck >= 0
+        logFilePath = receiver.config.logConfig.logFilePath;
+        if receiver.config.recvConfig.positionType == 00
+            logNameUse = strcat(logNamePart, '_', receiver.syst, '_', 'lsq');
+        elseif receiver.config.recvConfig.positionType == 01
+            logNameUse = strcat(logNamePart, '_', receiver.syst, '_', 'kalman');
+        end
+        P=zeros(1,3);
+        P(1)= receiver.pvtCalculator.positionXYZ(1);
+        P(2)=  receiver.pvtCalculator.positionXYZ(2);
+        P(3)=    receiver.pvtCalculator.positionXYZ(3);
+            Q1=[-2853702.49460991,4667244.62864575,3268344.29550058];%马路东点
+            Q2=[-2853298.00149200,4667616.63894344,3268172.28716137];%马路西点
+%             Q1=[-2852351,4667952,3268478];%三餐隧道东点
+%             Q2=[-2852487 ,  4667829     ,3268535 ];%三餐隧道西点
+%          Q1=[-2853315.49021131,4667286.37878011,3268615.40672849]; %桥北
+%          Q2=[-2853348.65828801,4667300.26584981,3268567.25246959];%桥南
+        Q1_ENU=xyz2enu(Q1,Q1);
+        Q2_ENU=xyz2enu(Q2,Q1);
+        P_ENU=xyz2enu(P,Q1);
+        k = (Q1_ENU(2)-Q2_ENU(2))/(Q1_ENU(1)-Q2_ENU(1));
+        b = Q1_ENU(2) - k*Q1_ENU(1);
+        error_ENU(Loop) = abs(P_ENU(2) - (k*P_ENU(1)+b));
+%         d(Loop) = norm(cross(Q2-Q1,P-Q1))/norm(Q2-Q1);  %ECEF坐标系
+        d(Loop) = norm(cross(Q2_ENU-Q1_ENU,P_ENU-Q1_ENU))/norm(Q2_ENU-Q1_ENU);  %ENU坐标系
+        k2 = (Q1_ENU(3)-Q2_ENU(3))/(Q1_ENU(2)-Q2_ENU(2));      
+        b2 = Q1_ENU(3) - k2*Q1_ENU(2);     
+        error_high(Loop) = abs(P_ENU(3) - (k2*P_ENU(2)+b2));
+%         plot( receiver.pvtCalculator.positionLLH(1), receiver.pvtCalculator.positionLLH(2),'b.');
+%         hold  on
+        OutputGPFPD(receiver.timer, receiver.pvtCalculator.positionLLH(1), receiver.pvtCalculator.positionLLH(2), receiver.pvtCalculator.positionLLH(3), receiver.pvtCalculator.positionVelocity, logFilePath, logNamePart);
+        OutputGPGGA(receiver.pvtCalculator.positionLLH(1), receiver.pvtCalculator.positionLLH(2), receiver.pvtCalculator.positionLLH(3), receiver.timer, 0, logFilePath, logNameUse, receiver.pvtCalculator.posiCheck)
+%         OutputGPGGA(latitude(Loop),longitude(Loop),  height(Loop), receiver.timer, 0, logFilePath, logNameUse, receiver.pvtCalculator.posiCheck)
+    end
+        
+end
+figure
+    plot(d(10:end));
+    xlabel('Epoch/s');
+    ylabel('Bias/m');
+    title('PDD error-ECEF');
+figure
+    plot(error_ENU(10:end));
+    xlabel('Epoch/s');
+    ylabel('Bias/m');
+    title('PDD error-ENU ');
+figure
+    plot(error_high(10:end));
+    xlabel('Epoch/s');
+    ylabel('Bias/m');
+    title('PDD error-HIGH ');
+
+disp(mean(d(1:end)));
+disp(mean(error_ENU(1:end)));
+disp(mean(error_high(1:end)));
+
+
+disp(std(d(1:end)));
+disp(std(error_ENU(1:end)));
+disp(std(error_high(1:end)));
