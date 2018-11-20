@@ -102,21 +102,22 @@ receiver = StartReceiver(receiver);
 % Initialization for recorder
 receiver = RecorderInitializing(receiver); % Cause recorder is related with channel assignment, need to be placed at the last
 receiver_ref  =receiver;
-logNamePart = 'NLS_DD_5_究极优化版';
+logNamePart = 'NLS_DD_6_究极优化版';
 if fileType == 1
-    filename_RinexRef = 'E:\导航组\测试数据\2018-8-21 电院位置标定实验\南边马路标定\第二次行走\2018_8_21_ref.18O'; 
-    filename_RinexObs = 'E:\导航组\测试数据\2018-8-21 电院位置标定实验\南边马路标定\第二次行走\2018_08_21_21_18_07_Rinex.txt';
-    fileNameLLH = 'E:\导航组\测试数据\2018-8-21 电院位置标定实验\南边马路标定\第二次行走\2018_08_21_21_18_07_LLH.txt';
-    fileName_R = 'E:\导航组\测试数据\2018-8-21 电院位置标定实验\南边马路标定\第二次行走\2018_08_21_21_18_07_R.txt';
-    fileName_Acc = 'E:\导航组\测试数据\2018-8-21 电院位置标定实验\南边马路标定\第二次行走\2018_08_21_21_18_07_acc.txt';
-
+    filename = 'E:\导航组\测试数据\2018年9月21号 静态点测量和三餐隧道【phone隧道、静态点ublox和phone】\第二次三餐隧道【已处理】\2018_09_21_18_10_53_';
+    filename_RinexRef = [filename,'ref','.18o'];
+    filename_RinexObs = [filename,'Rinex','.18o'];
+    fileName_LLH = [filename,'LLH','.txt'];
+    fileName_R = [filename,'R','.txt'];
+    fileName_Acc = [filename,'acc','.txt'];
+    fileName_timestamp = [filename,'GPS_VS_Date','.txt'];
     fileNameGps = 'E:\导航组\测试数据\2018-8-21 电院位置标定实验\2018_8_21.18p';
-   
     fileNameBds = 'E:\个人资料\小论文材料\ION2018\data\BDS_Eph_20180415.18p';
+    
     refPos = [ -2853445.926; 4667466.476; 3268291.272];  % 静态点
-    [time_LLH,longitude,latitude,height] =textread(fileNameLLH,'%s %f %f %f ','delimiter',',');  
+    [timestamp]=readGPStimestamp(fileName_timestamp);  
+    [time_LLH,longitude,latitude,height] =textread(fileName_LLH,'%s %f %f %f ','delimiter',',');  
     [Acc_WGS84,V_WGS84_s]=readIMU(fileName_R,fileName_Acc);
-%     [Acc_WGS84,V_WGS84_s]=readIMU(fileName_R_Acc);
     [parameter_ref, SOW_ref] = rinex2obs_basestation(filename_RinexRef, fileNameBds, fileNameGps, 1, refPos, receiver_ref.syst,Acc_WGS84,V_WGS84_s);  
     [parameter, SOW] = rinex2obs(filename_RinexObs, fileNameBds, fileNameGps, 1, refPos, receiver.syst,Acc_WGS84,V_WGS84_s);  
 elseif fileType == 2
@@ -124,8 +125,6 @@ elseif fileType == 2
 elseif fileType == 3
     load('paraNJeastRoad.mat');
     load('sowNJeastRoad.mat');
-%     load('paraSJTU.mat');
-%     load('sowSJTU.mat');
 end
 
 
@@ -183,33 +182,35 @@ while 1
         error_high(Loop) = abs(P_ENU(3) - (k2*P_ENU(2)+b2));
 %         plot( receiver.pvtCalculator.positionLLH(1), receiver.pvtCalculator.positionLLH(2),'b.');
 %         hold  on
+        ENUXYZ = xyz2enu(receiver.pvtCalculator.positionXYZ,Q1);
+        OutputPDR(timestamp(Loop),ENUXYZ,receiver.pvtCalculator.positionVelocity, logFilePath, logNamePart);
         OutputGPFPD(receiver.timer, receiver.pvtCalculator.positionLLH(1), receiver.pvtCalculator.positionLLH(2), receiver.pvtCalculator.positionLLH(3), receiver.pvtCalculator.positionVelocity, logFilePath, logNamePart);
         OutputGPGGA(receiver.pvtCalculator.positionLLH(1), receiver.pvtCalculator.positionLLH(2), receiver.pvtCalculator.positionLLH(3), receiver.timer, 0, logFilePath, logNameUse, receiver.pvtCalculator.posiCheck)
 %         OutputGPGGA(latitude(Loop),longitude(Loop),  height(Loop), receiver.timer, 0, logFilePath, logNameUse, receiver.pvtCalculator.posiCheck)
     end
         
 end
-figure
-    plot(d(10:end));
-    xlabel('Epoch/s');
-    ylabel('Bias/m');
-    title('PDD error-ECEF');
-figure
-    plot(error_ENU(10:end));
-    xlabel('Epoch/s');
-    ylabel('Bias/m');
-    title('PDD error-ENU ');
-figure
-    plot(error_high(10:end));
-    xlabel('Epoch/s');
-    ylabel('Bias/m');
-    title('PDD error-HIGH ');
-
-disp(mean(d(1:end)));
-disp(mean(error_ENU(1:end)));
-disp(mean(error_high(1:end)));
-
-
-disp(std(d(1:end)));
-disp(std(error_ENU(1:end)));
-disp(std(error_high(1:end)));
+% figure
+%     plot(d(10:end));
+%     xlabel('Epoch/s');
+%     ylabel('Bias/m');
+%     title('PDD error-ECEF');
+% figure
+%     plot(error_ENU(10:end));
+%     xlabel('Epoch/s');
+%     ylabel('Bias/m');
+%     title('PDD error-ENU ');
+% figure
+%     plot(error_high(10:end));
+%     xlabel('Epoch/s');
+%     ylabel('Bias/m');
+%     title('PDD error-HIGH ');
+% 
+% disp(mean(d(1:end)));
+% disp(mean(error_ENU(1:end)));
+% disp(mean(error_high(1:end)));
+% 
+% 
+% disp(std(d(1:end)));
+% disp(std(error_ENU(1:end)));
+% disp(std(error_high(1:end)));
