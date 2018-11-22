@@ -1,4 +1,4 @@
-function [Acc_WGS84,V_WGS84]=readIMU(fileName_R,fileName_Acc)
+function [Acc_WGS84,V_WGS84]=readIMU(fileName_R,fileName_Acc,factor)
 % [time_R_raw,R0,R1,R2,R3,R4,R5,R6,R7,R8,time_acc_raw,acc_x_raw,acc_y_raw,acc_z_raw] =textread(fileName_R_Acc,'%s %f %f %f %f %f %f %f %f %f %s %f %f %f','delimiter',',');  
 [time_acc_raw,acc_x_raw,acc_y_raw,acc_z_raw] =textread(fileName_Acc,'%s %f %f %f ','delimiter',',');  
 [time_R_raw,R0,R1,R2,R3,R4,R5,R6,R7,R8] =textread(fileName_R,'%s %f %f %f %f %f %f %f %f %f','delimiter',','); 
@@ -31,12 +31,15 @@ for i=1:length(acc_x)
     R(3,1)=R6(i);
     R(3,2)=R7(i);
     R(3,3)=R8(i);
-    Acc_body(i,1)=acc_x(i);
-    Acc_body(i,2)=acc_y(i);
-    Acc_body(i,3)=acc_z(i);
-%     Acc_body(i,1)=0;
-%     Acc_body(i,2)=0;
-%     Acc_body(i,3)=0;
+    if factor ==1 
+        Acc_body(i,1)=acc_x(i);
+        Acc_body(i,2)=acc_y(i);
+        Acc_body(i,3)=acc_z(i);
+    else
+        Acc_body(i,1)=0;
+        Acc_body(i,2)=0;
+        Acc_body(i,3)=0;
+    end
     V_body(i+1,:)=V_body(i,:)+Acc_body(i,1);
     X_body(i,:)=  X_body(i,:)+V_body(i,:);
     Acc_ENU(i,:)= R*Acc_body(i,:)';                         %BODY2ENU

@@ -102,8 +102,7 @@ receiver = StartReceiver(receiver);
 % Initialization for recorder
 receiver = RecorderInitializing(receiver); % Cause recorder is related with channel assignment, need to be placed at the last
 receiver_ref  =receiver;
-logNamePart = 'NLS_DD_1_究极优化版';
-IMU_factor = 0; %IMU是否有效 1代表读入，0代表不读
+logNamePart = 'NLS_DD_6_究极优化版';
 if fileType == 1
     filename = 'E:\导航组\测试数据\2018-9-2南端马路两段+树荫小测\第二次行走\2018_09_02_22_28_05_';
     filename_RinexRef = [filename,'ref','.18o'];
@@ -114,13 +113,11 @@ if fileType == 1
     fileName_timestamp = [filename,'GPS_VS_Date','.txt'];
     fileNameGps = 'E:\导航组\测试数据\2018-9-2南端马路两段+树荫小测\2018_9_2.18p';
     fileNameBds = 'E:\个人资料\小论文材料\ION2018\data\BDS_Eph_20180415.18p';
-
-    
     
     refPos = [ -2853445.926; 4667466.476; 3268291.272];  % 静态点
     [timestamp]=readGPStimestamp(fileName_timestamp);  
     [time_LLH,longitude,latitude,height] =textread(fileName_LLH,'%s %f %f %f ','delimiter',',');  
-    [Acc_WGS84,V_WGS84_s]=readIMU(fileName_R,fileName_Acc,IMU_factor);
+    [Acc_WGS84,V_WGS84_s]=readIMU(fileName_R,fileName_Acc);
     [parameter_ref, SOW_ref] = rinex2obs_basestation(filename_RinexRef, fileNameBds, fileNameGps, 1, refPos, receiver_ref.syst,Acc_WGS84,V_WGS84_s);  
     [parameter, SOW] = rinex2obs(filename_RinexObs, fileNameBds, fileNameGps, 1, refPos, receiver.syst,Acc_WGS84,V_WGS84_s);  
 elseif fileType == 2

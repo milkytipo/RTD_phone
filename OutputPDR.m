@@ -10,7 +10,7 @@ function OutputPDR(timestamp, positionXYZ, enuVel, path, name)
         Z = 0;
     end
     fid = fopen(logName,'a');
-    fprintf(fid,'%d,%9.4f,%9.4f,%9.4f,%9.4f,%9.4f,%9.4f\n',int64(timestamp),X,Y,Z,enuVel(1),enuVel(2),enuVel(3)); 
+    fprintf(fid,'%s,%9.4f,%9.4f,%9.4f,%9.4f,%9.4f,%9.4f\n',int64(timestamp),X,Y,Z,enuVel(1),enuVel(2),enuVel(3)); 
 %     fprintf(fid,'%s,\n',head, timestamp); 
 
     fclose(fid);
